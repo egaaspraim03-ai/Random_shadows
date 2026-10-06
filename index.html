@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Розыгрыш — Лента наград</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(180deg, #87CEEB 0%, #E0F7FA 40%, #FFF8E1 100%);
+      min-height: 100vh;
+      color: #1a1a1a;
+      overflow-x: hidden;
+      padding-bottom: 80px;
+    }
+
+    .header {
+      text-align: center;
+      padding: 16px 12px 8px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .header h1 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #e65100;
+      letter-spacing: 0.5px;
+    }
+    .header .sub {
+      font-size: 13px;
+      color: #555;
+      margin-top: 4px;
+    }
+    .progress-wrap {
+      margin: 10px auto 0;
+      width: 90%;
+      max-width: 340px;
+      height: 18px;
+      background: #fff;
+      border-radius: 20px;
+      border: 2px solid #ff9800;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ff9800, #ff5722);
+      border-radius: 20px;
+      transition: width 0.6s ease;
+    }
+    .progress-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #333;
+    }
+
+    /* ===== ЛЕНТА НАГРАД (летит слева направо) ===== */
+    .ribbon-section {
+      margin: 18px 0 12px;
+      position: relative;
+    }
+    .ribbon-label {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #bf360c;
+      margin-bottom: 8px;
+    }
+    .ribbon-viewport {
+      width: 100%;
+      overflow: hidden;
+      height: 130px;
+      position: relative;
+      mask-image: linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+    }
+    .ribbon-track {
+      display: flex;
+      gap: 12px;
+      width: max-content;
+      animation: flyRight 22s linear infinite;
+      padding: 8px 20px;
+    }
+    /* Дублируем содержимое для бесшовного цикла */
+    .ribbon-track.paused { animation-play-state: paused; }
+
+    @keyframes flyRight {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .prize-card {
+      width: 92px;
+      height: 110px;
+      background: linear-gradient(160deg, #ffffff 0%, #fff3e0 100%);
+      border-radius: 14px;
+      border: 2px solid #ffb74d;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .prize-card.won {
+      border-color: #4caf50;
+      opacity: 0.55;
+      filter: grayscale(0.3);
+    }
+    .prize-card.won::after {
+      content: "✓";
+      position: absolute;
+      top: 4px; right: 6px;
+      background: #4caf50;
+      color: #fff;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+    }
+    .prize-card img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+    .prize-card .name {
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      margin-top: 6px;
+      padding: 0 4px;
+      line-height: 1.2;
+      max-height: 26px;
+      overflow: hidden;
+    }
+    .prize-card .lot {
+      position: absolute;
+      bottom: 3px;
+      left: 5px;
+      font-size: 9px;
+      color: #888;
+      font-weight: 600;
+    }
+
+    .island {
+      text-align: center;
+      margin: 8px 0 16px;
+      font-size: 40px;
+      opacity: 0.9;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 0 16px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .btn {
+      border: none;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-main {
+      background: linear-gradient(90deg, #ff9800, #f57c00);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(255,152,0,0.45);
+    }
+    .btn-secondary {
+      background: #fff;
+      color: #e65100;
+      border: 2px solid #ff9800;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .results {
+      margin: 20px 16px 0;
+      background: #fff;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      display: none;
+    }
+    .results h3 {
+      font-size: 15px;
+      margin-bottom: 10px;
+      color: #e65100;
+    }
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 13px;
+    }
+    .result-item:last-child { border-bottom: none; }
+    .winner { color: #2e7d32; font-weight: 700; }
+
+    .footer-info {
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+      margin-top: 16px;
+      padding: 0 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔥 ГОРЯЧАЯ ПОРА</h1>
+    <div class="sub" id="giveawayTitle">Розыгрыш призов</div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+      <div class="progress-text" id="progressText">0 / 0</div>
+    </div>
+  </div>
+
+  <div class="ribbon-section">
+    <div class="ribbon-label">Лента наград → летит слева направо</div>
+    <div class="ribbon-viewport">
+      <div class="ribbon-track" id="ribbonTrack">
+        <!-- Призы вставляются JS-ом (дважды для бесшовной анимации) -->
+      </div>
+    </div>
+  </div>
+
+  <div class="island">🏝️ 🌴 🏠 📦</div>
+
+  <div class="actions">
+    <button class="btn btn-main" id="joinBtn" onclick="joinGiveaway()">🎟 Я участвую</button>
+    <button class="btn btn-secondary" id="refreshBtn" onclick="loadData()">🔄 Обновить ленту</button>
+  </div>
+
+  <div class="results" id="resultsBlock">
+    <h3>📋 Итоги розыгрыша</h3>
+    <div id="resultsList"></div>
+  </div>
+
+  <div class="footer-info" id="statusText">
+    Загрузка данных...
+  </div>
+
+  <script>
+    // ===== Telegram WebApp =====
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor('#ff9800');
+      tg.setBackgroundColor('#E0F7FA');
+    }
+
+    // ===== Данные (можно подставлять с бота) =====
+    // Пока демо. Потом бот будет передавать реальные призы через URL или API.
+    let state = {
+      title: "Карты и алмазы",
+      prizes: [
+        { id: 1, name: "Шлем дайвера", img: "https://via.placeholder.com/80/FF6D00/FFFFFF?text=Шлем", won: false, winner: null },
+        { id: 2, name: "×15 пыль", img: "https://via.placeholder.com/80/9C27B0/FFFFFF?text=Пыль", won: false, winner: null },
+        { id: 3, name: "15 000 \( ", img: "https://via.placeholder.com/80/4CAF50/FFFFFF?text= \)", won: false, winner: null },
+        { id: 4, name: "1000 BP EXP", img: "https://via.placeholder.com/80/2196F3/FFFFFF?text=BP", won: false, winner: null },
+        { id: 5, name: "Бомба X2", img: "https://via.placeholder.com/80/F44336/FFFFFF?text=💣", won: false, winner: null },
+        { id: 6, name: "Кейс", img: "https://via.placeholder.com/80/795548/FFFFFF?text=📦", won: false, winner: null },
+        { id: 7, name: "Black Pass", img: "https://via.placeholder.com/80/000000/FFFFFF?text=BP", won: false, winner: null },
+      ],
+      participants: 0,
+      joined: false,
+      finished: false
+    };
+
+    // Читаем параметры из URL (бот может передать ?title=...&prizes=...)
+    function parseUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('title')) state.title = params.get('title');
+      // Позже: если бот отдаёт JSON — можно загрузить через fetch
+    }
+
+    function renderRibbon() {
+      const track = document.getElementById('ribbonTrack');
+      // Рисуем два одинаковых набора — для бесконечной анимации
+      const html = state.prizes.map(p => `
+        <div class="prize-card \( {p.won ? 'won' : ''}" data-id=" \){p.id}">
+          <img src="\( {p.img}" alt=" \){p.name}" onerror="this.src='https://via.placeholder.com/80/FF9800/fff?text=🎁'" />
+          <div class="name">${p.name}</div>
+          <div class="lot">#${p.id}</div>
+        </div>
+      `).join('');
+      track.innerHTML = html + html; // дублируем
+    }
+
+    function updateProgress() {
+      const total = state.prizes.length;
+      const won = state.prizes.filter(p => p.won).length;
+      const pct = total ? (won / total * 100) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progressText').textContent = `${won} / ${total}`;
+      document.getElementById('giveawayTitle').textContent = state.title;
+    }
+
+    function renderResults() {
+      const block = document.getElementById('resultsBlock');
+      const list = document.getElementById('resultsList');
+      const finished = state.prizes.every(p => p.won);
+      if (!finished && !state.finished) {
+        block.style.display = 'none';
+        return;
+      }
+      block.style.display = 'block';
+      list.innerHTML = state.prizes.map(p => `
+        <div class="result-item">
+          <span>Лот #${p.id} — ${p.name}</span>
+          <span class="winner">${p.winner || '—'}</span>
+        </div>
+      `).join('');
+    }
+
+    function joinGiveaway() {
+      if (state.joined) return;
+      state.joined = true;
+      state.participants++;
+      document.getElementById('joinBtn').textContent = '✅ Вы участвуете';
+      document.getElementById('joinBtn').disabled = true;
+      document.getElementById('statusText').textContent = `Вы в розыгрыше! Участников: ${state.participants}`;
+      if (tg) {
+        tg.HapticFeedback.impactOccurred('medium');
+        tg.sendData(JSON.stringify({ action: 'join' })); // бот получит данные
+      }
+    }
+
+    function loadData() {
+      // Здесь позже будет fetch к твоему API / боту
+      // Пока просто перерисовываем
+      renderRibbon();
+      updateProgress();
+      renderResults();
+      document.getElementById('statusText').textContent = state.joined
+        ? `Вы участвуете · Участников: ${state.participants}`
+        : 'Нажмите «Я участвую»';
+    }
+
+    // Демо: имитация выдачи приза каждые 8 сек (потом уберёшь)
+    function demoAward() {
+      const next = state.prizes.find(p => !p.won);
+      if (!next) {
+        state.finished = true;
+        renderResults();
+        document.getElementById('statusText').textContent = 'Розыгрыш завершён!';
+        return;
+      }
+      next.won = true;
+      next.winner = '@player_' + Math.floor(Math.random()*900+100);
+      renderRibbon();
+      updateProgress();
+      renderResults();
+      if (tg) tg.HapticFeedback.notificationOccurred('success');
+    }
+
+    // Старт
+    parseUrlParams();
+    loadData();
+
+    // Раскомментируй, если хочешь демо-выдачу:
+    // setInterval(demoAward, 8000);
+  </script>
+</body>
+  </html>
