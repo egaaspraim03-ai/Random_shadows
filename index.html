@@ -1,146 +1,294 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Розыгрыш</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
-        body {
-            margin: 0;
-            padding: 0;
-            background: #0f0c0a;
-            color: #fff;
-            font-family: 'Press Start 2P', system-ui;
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        header {
-            background: linear-gradient(90deg, #ff00ff, #00ffff);
-            padding: 15px;
-            text-align: center;
-            font-size: 18px;
-            border-bottom: 4px solid #fff;
-            box-shadow: 0 0 20px #ff00ff;
-        }
-        .ribbon-container {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-            background: linear-gradient(45deg, #4a0e4a, #0a4a4a);
-        }
-        .track {
-            display: flex;
-            gap: 20px;
-            animation: flyRight 25s linear infinite;
-        }
-        .card {
-            width: 140px;
-            height: 140px;
-            background: #fff;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            transition: transform 0.2s;
-        }
-        .card img {
-            width: 110px;
-            height: 110px;
-            object-fit: contain;
-            margin-bottom: 5px;
-        }
-        .card:hover {
-            transform: scale(1.15) rotate(8deg);
-        }
-        .footer {
-            background: #111;
-            padding: 15px;
-            text-align: center;
-            font-size: 14px;
-            border-top: 4px solid #fff;
-        }
-        @keyframes flyRight {
-            from { transform: translateX(0); }
-            to { transform: translateX(-50%); }
-        }
-        .progress {
-            height: 6px;
-            background: linear-gradient(90deg, #ff00ff, #00ffff);
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            animation: progress 15s linear infinite;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Розыгрыш — Лента</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(180deg, #87CEEB 0%, #E0F7FA 40%, #FFF8E1 100%);
+      min-height: 100vh;
+      color: #1a1a1a;
+      overflow-x: hidden;
+      padding-bottom: 80px;
+    }
+    .header {
+      text-align: center;
+      padding: 16px 12px 8px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .header h1 { font-size: 20px; font-weight: 800; color: #e65100; }
+    .header .sub { font-size: 13px; color: #555; margin-top: 4px; }
+    .progress-wrap {
+      margin: 10px auto 0;
+      width: 90%;
+      max-width: 340px;
+      height: 18px;
+      background: #fff;
+      border-radius: 20px;
+      border: 2px solid #ff9800;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ff9800, #ff5722);
+      border-radius: 20px;
+      transition: width 0.6s ease;
+    }
+    .progress-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #333;
+    }
+    .ribbon-section { margin: 18px 0 12px; }
+    .ribbon-label {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #bf360c;
+      margin-bottom: 8px;
+    }
+    .ribbon-viewport {
+      width: 100%;
+      overflow: hidden;
+      height: 130px;
+      mask-image: linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+    }
+    .ribbon-track {
+      display: flex;
+      gap: 12px;
+      width: max-content;
+      animation: flyRight 22s linear infinite;
+      padding: 8px 20px;
+    }
+    @keyframes flyRight {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .prize-card {
+      width: 92px;
+      height: 110px;
+      background: linear-gradient(160deg, #ffffff 0%, #fff3e0 100%);
+      border-radius: 14px;
+      border: 2px solid #ffb74d;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .prize-card.won {
+      border-color: #4caf50;
+      opacity: 0.55;
+      filter: grayscale(0.3);
+    }
+    .prize-card.won::after {
+      content: "✓";
+      position: absolute;
+      top: 4px; right: 6px;
+      background: #4caf50;
+      color: #fff;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+    }
+    .prize-card img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+    .prize-card .name {
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      margin-top: 6px;
+      padding: 0 4px;
+      line-height: 1.2;
+      max-height: 26px;
+      overflow: hidden;
+    }
+    .prize-card .lot {
+      position: absolute;
+      bottom: 3px;
+      left: 5px;
+      font-size: 9px;
+      color: #888;
+      font-weight: 600;
+    }
+    .island { text-align: center; margin: 8px 0 16px; font-size: 40px; }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 0 16px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .btn {
+      border: none;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-main {
+      background: linear-gradient(90deg, #ff9800, #f57c00);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(255,152,0,0.45);
+    }
+    .btn:disabled { opacity: 0.5; pointer-events: none; }
+    .results {
+      margin: 20px 16px 0;
+      background: #fff;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      display: none;
+    }
+    .results h3 { font-size: 15px; margin-bottom: 10px; color: #e65100; }
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 13px;
+    }
+    .result-item:last-child { border-bottom: none; }
+    .winner { color: #2e7d32; font-weight: 700; }
+    .footer-info {
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+      margin-top: 16px;
+      padding: 0 16px;
+    }
+  </style>
 </head>
 <body>
-    <header>🔥 РОЗЫГРЫШИ 🔥</header>
-    
-    <div class="ribbon-container">
-        <div class="progress"></div>
-        <div class="track" id="track">
-            <!-- Призы будут добавляться сюда через JS -->
+  <div class="header">
+    <h1>🔥 ГОРЯЧАЯ ПОРА</h1>
+    <div class="sub" id="giveawayTitle">Розыгрыш призов</div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+      <div class="progress-text" id="progressText">0 / 0</div>
+    </div>
+  </div>
+
+  <div class="ribbon-section">
+    <div class="ribbon-label">Лента наград → летит слева направо</div>
+    <div class="ribbon-viewport">
+      <div class="ribbon-track" id="ribbonTrack"></div>
+    </div>
+  </div>
+
+  <div class="island">🏝️ 🌴 🏠 📦</div>
+
+  <div class="actions">
+    <button class="btn btn-main" id="joinBtn" onclick="joinGiveaway()">🎟 Я участвую</button>
+  </div>
+
+  <div class="results" id="resultsBlock">
+    <h3>📋 Итоги розыгрыша</h3>
+    <div id="resultsList"></div>
+  </div>
+
+  <div class="footer-info" id="statusText">Загрузка...</div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor('#ff9800');
+      tg.setBackgroundColor('#E0F7FA');
+    }
+
+    // Читаем giveaway_id из URL (?g=xxxx)
+    const urlParams = new URLSearchParams(window.location.search);
+    const giveawayId = urlParams.get('g') || null;
+
+    let state = {
+      title: "Розыгрыш",
+      prizes: [
+        { id: 1, name: "Приз 1", img: "https://via.placeholder.com/80/FF6D00/FFFFFF?text=1", won: false, winner: null },
+        { id: 2, name: "Приз 2", img: "https://via.placeholder.com/80/9C27B0/FFFFFF?text=2", won: false, winner: null },
+        { id: 3, name: "Приз 3", img: "https://via.placeholder.com/80/4CAF50/FFFFFF?text=3", won: false, winner: null },
+        { id: 4, name: "Приз 4", img: "https://via.placeholder.com/80/2196F3/FFFFFF?text=4", won: false, winner: null },
+        { id: 5, name: "Приз 5", img: "https://via.placeholder.com/80/F44336/FFFFFF?text=5", won: false, winner: null },
+      ],
+      joined: false
+    };
+
+    function renderRibbon() {
+      const track = document.getElementById('ribbonTrack');
+      const html = state.prizes.map(p => `
+        <div class="prize-card \( {p.won ? 'won' : ''}" data-id=" \){p.id}">
+          <img src="\( {p.img}" alt=" \){p.name}" onerror="this.src='https://via.placeholder.com/80/FF9800/fff?text=🎁'" />
+          <div class="name">${p.name}</div>
+          <div class="lot">#${p.id}</div>
         </div>
-    </div>
+      `).join('');
+      track.innerHTML = html + html; // дублируем для бесконечной анимации
+    }
 
-    <div class="footer">
-        <button id="participate" onclick="participate()" style="padding:12px 30px; font-size:16px; background:#00ff00; color:#000; border:none; border-radius:8px; cursor:pointer;">
-            Я УЧАСТВУЮ!
-        </button>
-        <p style="margin-top:10px; font-size:12px;">Нажми кнопку — бот выберет победителя рандомно</p>
-    </div>
+    function updateProgress() {
+      const total = state.prizes.length;
+      const won = state.prizes.filter(p => p.won).length;
+      const pct = total ? (won / total * 100) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progressText').textContent = `${won} / ${total}`;
+      document.getElementById('giveawayTitle').textContent = state.title;
+    }
 
-    <script>
-        // Для теста добавим 3 приза (в реальном боте будет динамика)
-        const prizes = [
-            { name: "Алмазы", img: "https://picsum.photos/id/1015/300/300" },
-            { name: "Карты", img: "https://picsum.photos/id/201/300/300" },
-            { name: "Про на акк", img: "https://picsum.photos/id/237/300/300" }
-        ];
+    function joinGiveaway() {
+      if (state.joined) return;
+      if (!giveawayId) {
+        document.getElementById('statusText').textContent = "Открой по уникальной ссылке!";
+        return;
+      }
+      state.joined = true;
+      document.getElementById('joinBtn').textContent = '✅ Вы участвуете';
+      document.getElementById('joinBtn').disabled = true;
+      document.getElementById('statusText').textContent = "Ты в розыгрыше!";
 
-        function createPrizes() {
-            const track = document.getElementById('track');
-            track.innerHTML = '';
-            prizes.forEach((prize, i) => {
-                const div = document.createElement('div');
-                div.className = 'card';
-                div.innerHTML = `
-                    <img src="\( {prize.img}" alt=" \){prize.name}">
-                    <div style="font-size:12px; font-weight:bold;">${prize.name}</div>
-                `;
-                track.appendChild(div);
-            });
-        }
+      if (tg) {
+        tg.HapticFeedback.impactOccurred('medium');
+        tg.sendData(JSON.stringify({
+          action: 'join',
+          giveaway_id: giveawayId
+        }));
+      }
+    }
 
-        function participate() {
-            document.getElementById('participate').textContent = '🎉 ПОБЕДИТЕЛЬ ОПРЕДЕЛЁН!';
-            document.getElementById('participate').style.background = '#ff00ff';
-            
-            // Для теста просто показываем случайного победителя
-            const winners = ["@user1", "@user2", "@user3"];
-            const winner = winners[Math.floor(Math.random() * winners.length)];
-            
-            alert(`🎉 ПОБЕДИТЕЛЬ: ${winner}!\n\nПоздравляем!`);
-        }
-
-        // Запуск
-        window.onload = () => {
-            createPrizes();
-            
-            // Автоматически обновляем ленту каждые 15 секунд (как в боте)
-            setInterval(() => {
-                createPrizes();
-            }, 15000);
-        };
-    </script>
+    // Старт
+    renderRibbon();
+    updateProgress();
+    document.getElementById('statusText').textContent = giveawayId
+      ? "Нажми «Я участвую»"
+      : "Открой бота по уникальной ссылке";
+  </script>
 </body>
 </html>
