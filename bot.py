@@ -25,14 +25,12 @@ bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# ========== FSM ==========
 class CreateGW(StatesGroup):
     title = State()
     count = State()
     photos = State()
     interval = State()
 
-# ========== База ==========
 async def init_db():
     async with aiosqlite.connect("giveaways.db") as db:
         await db.execute("""
@@ -64,7 +62,6 @@ async def init_db():
         """)
         await db.commit()
 
-# ========== Клавиатуры ==========
 def main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎁 Создать розыгрыш", callback_data="create")],
@@ -77,12 +74,10 @@ def open_webapp_kb(giveaway_id: str):
         [InlineKeyboardButton(text="🔥 Открыть ленту розыгрыша", web_app=WebAppInfo(url=url))]
     ])
 
-# ========== /start (без подписки на канал!) ==========
 @dp.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject):
     args = command.args
 
-    # Если пришли по уникальной ссылке
     if args and args.startswith("g_"):
         giveaway_id = args[2:]
         await message.answer(
@@ -92,14 +87,12 @@ async def cmd_start(message: Message, command: CommandObject):
         )
         return
 
-    # Обычный старт
     await message.answer(
         "👋 Привет! Бот для розыгрышей с летающей лентой.\n\n"
         "Создай розыгрыш → получи уникальную ссылку → друзья участвуют только по ней.",
         reply_markup=main_kb()
     )
 
-# ========== Создание ==========
 @dp.callback_query(F.data == "create")
 async def start_create(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CreateGW.title)
@@ -175,7 +168,6 @@ async def process_interval(message: Message, state: FSMContext):
     )
     await state.clear()
 
-# ========== Данные от Mini App ==========
 @dp.message(F.web_app_data)
 async def web_app_handler(message: Message):
     try:
@@ -205,7 +197,6 @@ async def web_app_handler(message: Message):
 
         await message.answer(f"🎉 {user.full_name}, ты в розыгрыше!")
 
-# ========== Запуск ==========
 async def main():
     await init_db()
     print("Бот запущен")
