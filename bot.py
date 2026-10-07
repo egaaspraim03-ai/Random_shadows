@@ -1,206 +1,214 @@
 import asyncio
-import secrets
-import aiosqlite
+import json
+import uuid
+import os
+from datetime import datetime
+
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart, CommandObject
+from aiogram.filters import Command, CommandObject
 from aiogram.types import (
-    Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
+    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
     WebAppInfo
 )
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+import aiosqlite
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-WEBAPP_URL = os.getenv("WEBAPP_URL")
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://egaaspraim03-ai.github.io/Random_shadows/")
 
+bot = Bot(token=BOT_TOKEN)
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+
+# ========== FSM ==========
 class CreateGW(StatesGroup):
     title = State()
     count = State()
     photos = State()
     interval = State()
 
+# ========== База ==========
 async def init_db():
     async with aiosqlite.connect("giveaways.db") as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS giveaways (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                code TEXT UNIQUE,
-                creator_id INTEGER,
+                id TEXT PRIMARY KEY,
                 title TEXT,
-                interval_sec INTEGER DEFAULT 30,
-                status TEXT DEFAULT 'draft'
-            )
-        """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS prizes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                giveaway_id INTEGER,
-                position INTEGER,
-                file_id TEXT,
-                caption TEXT,
-                winner_id INTEGER,
-                winner_username TEXT
+                creator_id INTEGER,
+                prizes TEXT,
+                interval INTEGER,
+                created_at TEXT
             )
         """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS participants (
-                giveaway_id INTEGER,
+                giveaway_id TEXT,
                 user_id INTEGER,
                 username TEXT,
-                full_name TEXT,
-                UNIQUE(giveaway_id, user_id)
+                PRIMARY KEY (giveaway_id, user_id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS winners (
+                giveaway_id TEXT,
+                lot INTEGER,
+                user_id INTEGER,
+                username TEXT,
+                prize_file_id TEXT
             )
         """)
         await db.commit()
 
+# ========== Клавиатуры ==========
 def main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎁 Создать розыгрыш", callback_data="create")],
-        [InlineKeyboardButton(text="📋 Мои розыгрыши", callback_data="my")],
+        [InlineKeyboardButton(text="🎯 Открыть ленту", web_app=WebAppInfo(url=WEBAPP_URL))]
     ])
 
-def open_webapp_kb(code: str):
-    url = f"{WEBAPP_URL}?code={code}"
+def open_webapp_kb(giveaway_id: str):
+    url = f"{WEBAPP_URL}?g={giveaway_id}"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="🔥 Открыть ленту наград",
-            web_app=WebAppInfo(url=url)
-        )],
-        [InlineKeyboardButton(text="▶️ Запустить розыгрыш", callback_data=f"start_{code}")],
-        [InlineKeyboardButton(text="🔗 Ссылка для друзей", callback_data=f"link_{code}")],
+        [InlineKeyboardButton(text="🔥 Открыть ленту розыгрыша", web_app=WebAppInfo(url=url))]
     ])
 
-@dp.message(CommandStart())
+# ========== /start (без подписки на канал!) ==========
+@dp.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject):
     args = command.args
+
+    # Если пришли по уникальной ссылке
     if args and args.startswith("g_"):
-        code = args[2:]
+        giveaway_id = args[2:]
         await message.answer(
-            f"Ты перешёл по ссылке розыгрыша `{code}`\n\n"
-            "Нажми кнопку ниже, чтобы открыть **ленту наград** 👇",
-            reply_markup=open_webapp_kb(code),
-            parse_mode="Markdown"
+            "🎉 Ты перешёл по уникальной ссылке!\n\n"
+            "Нажми кнопку, чтобы открыть ленту и участвовать:",
+            reply_markup=open_webapp_kb(giveaway_id)
         )
         return
 
+    # Обычный старт
     await message.answer(
-        "🔥 **Бот розыгрышей**\n\n"
-        "Создавай розыгрыши с живой лентой призов, как в «Горячая пора».\n"
-        "Участники заходят только по уникальной ссылке.",
-        reply_markup=main_kb(),
-        parse_mode="Markdown"
+        "👋 Привет! Бот для розыгрышей с летающей лентой.\n\n"
+        "Создай розыгрыш → получи уникальную ссылку → друзья участвуют только по ней.",
+        reply_markup=main_kb()
     )
 
+# ========== Создание ==========
 @dp.callback_query(F.data == "create")
-async def create_start(c: CallbackQuery, state: FSMContext):
+async def start_create(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CreateGW.title)
-    await c.message.answer("Напиши название розыгрыша (например: Карты разных рангов)")
-    await c.answer()
+    await callback.message.answer("📝 Название розыгрыша:")
+    await callback.answer()
 
 @dp.message(CreateGW.title)
-async def set_title(m: Message, state: FSMContext):
-    await state.update_data(title=m.text)
+async def process_title(message: Message, state: FSMContext):
+    await state.update_data(title=message.text)
     await state.set_state(CreateGW.count)
-    await m.answer("Сколько призов будет? (число, например 7)")
+    await message.answer("🔢 Сколько призов? (число)")
 
 @dp.message(CreateGW.count)
-async def set_count(m: Message, state: FSMContext):
+async def process_count(message: Message, state: FSMContext):
     try:
-        count = int(m.text)
-        if count < 1 or count > 30:
+        count = int(message.text)
+        if not 1 <= count <= 30:
             raise ValueError
     except:
-        await m.answer("Введи число от 1 до 30")
+        await message.answer("Введи число от 1 до 30")
         return
     await state.update_data(count=count, photos=[])
     await state.set_state(CreateGW.photos)
-    await m.answer(f"Отправь {count} фото призов **по одному**.\nСейчас 0/{count}")
+    await message.answer(f"📸 Отправь {count} фото призов (по одному).")
 
 @dp.message(CreateGW.photos, F.photo)
-async def add_photo(m: Message, state: FSMContext):
+async def process_photos(message: Message, state: FSMContext):
     data = await state.get_data()
-    photos = data["photos"]
-    file_id = m.photo[-1].file_id
-    caption = m.caption or f"Приз #{len(photos)+1}"
-    photos.append({"file_id": file_id, "caption": caption})
+    photos = data.get("photos", [])
+    photos.append(message.photo[-1].file_id)
     await state.update_data(photos=photos)
 
-    if len(photos) < data["count"]:
-        await m.answer(f"Принято {len(photos)}/{data['count']}. Жду следующее фото")
-    else:
-        await state.set_state(CreateGW.interval)
-        await m.answer("Все фото получены!\nУкажи интервал между выдачей призов **в секундах** (например 30)")
+    left = data["count"] - len(photos)
+    if left > 0:
+        await message.answer(f"✅ {len(photos)} принято. Осталось {left}.")
+        return
+
+    await state.set_state(CreateGW.interval)
+    await message.answer("⏱ Интервал между наградами (секунды, минимум 10):")
 
 @dp.message(CreateGW.interval)
-async def set_interval(m: Message, state: FSMContext):
+async def process_interval(message: Message, state: FSMContext):
     try:
-        interval = int(m.text)
+        interval = int(message.text)
+        if interval < 10:
+            raise ValueError
     except:
-        await m.answer("Введи число секунд")
+        await message.answer("Минимум 10 секунд. Напиши число.")
         return
 
     data = await state.get_data()
-    code = secrets.token_urlsafe(6)
+    giveaway_id = str(uuid.uuid4())[:8]
 
     async with aiosqlite.connect("giveaways.db") as db:
-        cur = await db.execute(
-            "INSERT INTO giveaways (code, creator_id, title, interval_sec) VALUES (?, ?, ?, ?)",
-            (code, m.from_user.id, data["title"], interval)
+        await db.execute(
+            "INSERT INTO giveaways (id, title, creator_id, prizes, interval, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (giveaway_id, data["title"], message.from_user.id, json.dumps(data["photos"]), interval, datetime.now().isoformat())
         )
-        gw_id = cur.lastrowid
-        for i, p in enumerate(data["photos"], 1):
-            await db.execute(
-                "INSERT INTO prizes (giveaway_id, position, file_id, caption) VALUES (?, ?, ?, ?)",
-                (gw_id, i, p["file_id"], p["caption"])
-            )
         await db.commit()
 
-    await state.clear()
     me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start=g_{code}"
+    unique_link = f"https://t.me/{me.username}?start=g_{giveaway_id}"
 
-    await m.answer(
+    await message.answer(
         f"✅ Розыгрыш создан!\n\n"
-        f"**{data['title']}**\n"
-        f"Призов: {data['count']}\n"
-        f"Интервал: {interval} сек\n\n"
-        f"Уникальная ссылка:\n`{link}`\n\n"
-        f"Открой ленту наград кнопкой ниже 👇",
-        reply_markup=open_webapp_kb(code),
-        parse_mode="Markdown"
+        f"📌 {data['title']}\n"
+        f"🎁 Призов: {len(data['photos'])}\n"
+        f"⏱ Интервал: {interval} сек\n\n"
+        f"🔗 Уникальная ссылка (только по ней можно участвовать):\n"
+        f"`{unique_link}`",
+        parse_mode="Markdown",
+        reply_markup=open_webapp_kb(giveaway_id)
     )
+    await state.clear()
 
-@dp.callback_query(F.data.startswith("link_"))
-async def send_link(c: CallbackQuery):
-    code = c.data.split("_", 1)[1]
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start=g_{code}"
-    await c.message.answer(f"Ссылка для друзей:\n{link}")
-    await c.answer()
-
-@dp.callback_query(F.data.startswith("start_"))
-async def start_gw(c: CallbackQuery):
-    await c.answer("Розыгрыш запущен! (полная логика выдачи добавим следующим шагом)", show_alert=True)
-
-@dp.callback_query(F.data == "my")
-async def my_giveaways(c: CallbackQuery):
-    await c.answer("Скоро будет список твоих розыгрышей", show_alert=True)
-
+# ========== Данные от Mini App ==========
 @dp.message(F.web_app_data)
-async def webapp_data(message: Message):
-    await message.answer(f"Данные из Mini App: `{message.web_app_data.data}`", parse_mode="Markdown")
+async def web_app_handler(message: Message):
+    try:
+        data = json.loads(message.web_app_data.data)
+    except Exception:
+        await message.answer("Ошибка данных")
+        return
 
+    if data.get("action") == "join" and data.get("giveaway_id"):
+        giveaway_id = data["giveaway_id"]
+        user = message.from_user
+
+        async with aiosqlite.connect("giveaways.db") as db:
+            async with db.execute(
+                "SELECT 1 FROM participants WHERE giveaway_id=? AND user_id=?",
+                (giveaway_id, user.id)
+            ) as cur:
+                if await cur.fetchone():
+                    await message.answer("Ты уже участвуешь!")
+                    return
+
+            await db.execute(
+                "INSERT INTO participants (giveaway_id, user_id, username) VALUES (?, ?, ?)",
+                (giveaway_id, user.id, user.username or user.full_name)
+            )
+            await db.commit()
+
+        await message.answer(f"🎉 {user.full_name}, ты в розыгрыше!")
+
+# ========== Запуск ==========
 async def main():
     await init_db()
-    print("✅ Бот запущен! Не закрывай Termux.")
+    print("Бот запущен")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
