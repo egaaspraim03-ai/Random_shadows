@@ -1,0 +1,18 @@
+[project]
+name = "random-shadows"          
+version = "1.0"                   
+description = "Telegram giveaway bot with live ribbon"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram==3.13.1",
+    "aiosqlite==0.20.0",
+    "python-dotenv==1.0.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
